@@ -11,10 +11,6 @@
 	};
 	
 	var defaults = {
-			transactionBegin: false,
-			transactionOperations: [],
-			transactionStoreName: [],
-			transactionObj: null,
 			version: 1,
 			onReady: function () {
 			},
@@ -38,6 +34,11 @@
 		this.openDB();
 	}
 
+	HandbookIDB.prototype.transactionBegin = false;
+	HandbookIDB.prototype.transactionOperations = [];
+	HandbookIDB.prototype.transactionStoreNames = [];
+	HandbookIDB.prototype.transactionObj = null;
+	
 	HandbookIDB.prototype.log = function(message){
 		if(this.debug){
 			console.log(message);
@@ -116,16 +117,21 @@
 		}, options);
 		
 		if(this.transactionOperations){
+			var transactionOperations = this.transactionOperations;
+			var transactionStoreNames = this.transactionStoreNames;
+			this.transactionOperations = [];
+			this.transactionStoreNames = [];
 			var flag = true;
-			var transaction = this.db.transaction([this.transactionStoreName], 'readwrite');
+			var transaction = this.db.transaction([transactionStoreNames], 'readwrite');
 			var self = this;
-			this.transactionOperations.forEach(function(operation){
+			transactionOperations.forEach(function(operation){
 				if(!flag){
 					return;
 				}
 				switch(operation.type){
 					case 'save':
 						operation.options.transaction = transaction;
+						operation.options.storeName = transactionStoreNames;
 						flag = self.save(operation.data, operation.options);
 						break;
 					default:
@@ -331,19 +337,46 @@
 		return transaction;
 	};
 	
+	HandbookIDB.prototype._save = function(data, options){
+		var store = options.transaction.objectStore(options.storeName);
+
+		//check primary id
+		if(store.keyPath == 'id' && store.autoIncrement && typeof data.id != 'undefined'){
+			options.onError('Cannot insert auto increment column data');
+			return false;
+		}
+		
+		//check index
+		var indexs = store.indexNames;
+		for(var i=0; i<indexs.length; i++){
+			if(typeof data[indexs[i]] == 'undefined'){
+				options.onError('Data must include index column: '+indexs[i]);
+				return false;
+			}
+		}
+		
+		if (options.key) { //out-of-line keys
+			request = store.put(data, options.key);
+		} else { //in-line keys
+			request = store.put(data);
+		}
+		
+		return request;
+	};
+	
 	HandbookIDB.prototype.save = function(data, options){
 		this.log('HandbookIDB.prototype.save');
 		options = mixin({
 			storeName: this.storeName,
 			onSuccess: defaultSuccessHandler,
 			onError: defaultErrorHandler,
-			transaction: null
+			transaction: this.transactionObj
 		}, options);
 		
 		//this 'transactionBegin' flag is active in begin() function
 		if(this.transactionBegin){
-			if(options.storeName && !this.transactionStoreName.contains(options.storeName)){
-				this.transactionStoreName.push(options.storeName);
+			if(options.storeName && !this.transactionStoreNames.contains(options.storeName)){
+				this.transactionStoreNames.push(options.storeName);
 			}
 			this.transactionOperations.push({'type':'save', 'data':data, 'options':options});
 			return;
@@ -368,33 +401,19 @@
 			transaction.onerror = options.onError;
 		}
 		
-		var store = transaction.objectStore(options.storeName);
-
-		//check primary id
-		if(store.keyPath == 'id' && store.autoIncrement && typeof data.id != 'undefined'){
-			options.onError('Cannot insert auto increment column data');
-			return false;
-		}
+		var request = this._save(data, options);
 		
-		//check index
-		var indexs = store.indexNames;
-		for(var i=0; i<indexs.length; i++){
-			if(typeof data[indexs[i]] == 'undefined'){
-				options.onError('Data must include index column: '+indexs[i]);
-				return false;
-			}
-		}
-		
-		if (options.key) { //out-of-line keys
-			request = store.put(data, options.key);
-		} else { //in-line keys
-			request = store.put(data);
-		}
 		request.onsuccess = function (e) {
 			this.log('request.onsuccess');
 			result = e.target.result;
-			//if options.transaction is exist, then run onSuccess in the same transaction
-			options.transaction ? options.onSuccess(result, options.transaction) : flag = true;
+			//if options.transaction is exist, then set this transaction to global variable
+			if(options.transaction){
+				this.transactionObj = options.transaction;
+				options.onSuccess(result);
+				this.transactionObj = null;
+			}else{
+				flag = true;
+			}
 		}.bind(this);
 		request.onerror = function(e){
 			this.log('request.onerror');
