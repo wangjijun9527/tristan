@@ -128,11 +128,17 @@
 				if(!flag){
 					return;
 				}
+				operation.options.transaction = transaction;
+				operation.options.storeName = transactionStoreNames;
 				switch(operation.type){
 					case 'save':
-						operation.options.transaction = transaction;
-						operation.options.storeName = transactionStoreNames;
 						flag = self.save(operation.data, operation.options);
+						break;
+					case 'update':
+						flag = self.update(operation.key, operation.data, operation.options);
+						break;
+					case 'remove':
+						flag = self.remove(operation.key, operation.options);
 						break;
 					default:
 						break;
@@ -338,7 +344,23 @@
 	};
 	
 	HandbookIDB.prototype._save = function(data, options){
-		var store = options.transaction.objectStore(options.storeName);
+		this.log('HandbookIDB.prototype._save');
+		
+		var flag = false,
+		request = null,
+		result = null;
+	
+		var transaction = this.db.transaction([options.storeName], 'readwrite');
+		transaction.oncomplete = function () {
+			this.log('transaction.oncomplete');
+			if(flag){
+				options.onSuccess(result);
+			}
+		}.bind(this);
+		transaction.onabort = options.onError;
+		transaction.onerror = options.onError;
+		
+		var store = transaction.objectStore(options.storeName);
 
 		//check primary id
 		if(store.keyPath == 'id' && store.autoIncrement && typeof data.id != 'undefined'){
@@ -361,7 +383,16 @@
 			request = store.put(data);
 		}
 		
-		return request;
+		request.onsuccess = function (e) {
+			this.log('request.onsuccess');
+			result = e.target.result;
+			flag = true;
+		}.bind(this);
+		request.onerror = function(e){
+			this.log('request.onerror');
+		}.bind(this);
+		
+		return transaction;
 	};
 	
 	HandbookIDB.prototype.save = function(data, options){
@@ -382,52 +413,51 @@
 			return;
 		}
 		
-		//manual controll transaction
+		//already have transaction, for example: batch operate
 		if(options.transaction){
 			var transaction = options.transaction;
-		}else{
-			var flag = false,
-			request = null,
-			result = null;
-		
-			var transaction = this.db.transaction([options.storeName], 'readwrite');
-			transaction.oncomplete = function () {
-				this.log('transaction.oncomplete');
-				if(flag){
-					options.onSuccess(result);
+			
+			var store = transaction.objectStore(options.storeName);
+
+			//check primary id
+			if(store.keyPath == 'id' && store.autoIncrement && typeof data.id != 'undefined'){
+				options.onError('Cannot insert auto increment column data');
+				return false;
+			}
+			
+			//check index
+			var indexs = store.indexNames;
+			for(var i=0; i<indexs.length; i++){
+				if(typeof data[indexs[i]] == 'undefined'){
+					options.onError('Data must include index column: '+indexs[i]);
+					return false;
 				}
+			}
+			
+			if (options.key) { //out-of-line keys
+				request = store.put(data, options.key);
+			} else { //in-line keys
+				request = store.put(data);
+			}
+			
+			request.onsuccess = function (e) {
+				this.log('request.onsuccess');
+				this.transactionObj = transaction;
+				options.onSuccess(e.target.result);
+				this.transactionObj = null;
 			}.bind(this);
-			transaction.onabort = options.onError;
-			transaction.onerror = options.onError;
+			request.onerror = function(e){
+				this.log('request.onerror');
+			}.bind(this);
+		}else{
+			var transaction = this._save(data, options);
 		}
 		
-		var request = this._save(data, options);
-		
-		request.onsuccess = function (e) {
-			this.log('request.onsuccess');
-			result = e.target.result;
-			//if options.transaction is exist, then set this transaction to global variable
-			if(options.transaction){
-				this.transactionObj = options.transaction;
-				options.onSuccess(result);
-				this.transactionObj = null;
-			}else{
-				flag = true;
-			}
-		}.bind(this);
-		request.onerror = function(e){
-			this.log('request.onerror');
-		}.bind(this);
 		return transaction;
 	};
 	
-	HandbookIDB.prototype.update = function(key, data, options){
-		this.log('HandbookIDB.prototype.update');
-		options = mixin({
-			storeName: this.storeName,
-			onSuccess: defaultSuccessHandler,
-			onError: defaultErrorHandler
-		}, options);
+	HandbookIDB.prototype._update = function(key, data, options){
+		this.log('HandbookIDB.prototype._update');
 		
 		var flag = false,
 			result = null,
@@ -463,27 +493,80 @@
 				}.bind(this);
 				putRequest.onerror = function(e){
 					this.log('putRequest.onerror');
-					options.onError(e);
 				}.bind(this);
 			}else{
 				this.log('getResult is null');
-				result = new Error('Cannot get record!');
+				result = 'Cannot get record!';
 			}
 		}.bind(this);
 		getRequest.onerror = function(e){
 			this.log('getRequest.onerror');
-			options.onError(e);
 		}.bind(this);
 		return transaction;
 	};
 	
-	HandbookIDB.prototype.remove = function(key, options){
-		this.log('HandbookIDB.prototype.remove');
+	HandbookIDB.prototype.update = function(key, data, options){
+		this.log('HandbookIDB.prototype.update');
 		options = mixin({
 			storeName: this.storeName,
 			onSuccess: defaultSuccessHandler,
-			onError: defaultErrorHandler
+			onError: defaultErrorHandler,
+			transaction: this.transactionObj
 		}, options);
+		
+		//this 'transactionBegin' flag is active in begin() function
+		if(this.transactionBegin){
+			if(options.storeName && !this.transactionStoreNames.contains(options.storeName)){
+				this.transactionStoreNames.push(options.storeName);
+			}
+			this.transactionOperations.push({'type':'update', 'key': key, 'data':data, 'options':options});
+			return;
+		}
+		
+		//already have transaction, for example: batch operate
+		if(options.transaction){
+			var transaction = options.transaction;
+			var store = transaction.objectStore(options.storeName);
+			//delete primary id in data
+			if(store.keyPath == 'id' && store.autoIncrement && typeof data.id != 'undefined'){
+				delete data.id;
+			}
+			
+			var getRequest = store.get(key);
+			getRequest.onsuccess = function(e){
+				this.log('getRequest.onsuccess');
+				getResult = e.target.result;
+				if(getResult){
+					for( var k in data){
+						getResult[k] = typeof data[k] != 'undefined' ? data[k] : getResult[k];
+					}
+					putRequest = store.put(getResult);
+					putRequest.onsuccess = function(e){
+						this.log('putRequest.onsuccess');
+						this.transactionObj = transaction;
+						options.onSuccess(e.target.result);
+						this.transactionObj = null;
+					}.bind(this);
+					putRequest.onerror = function(e){
+						this.log('putRequest.onerror');
+					}.bind(this);
+				}else{
+					this.log('getResult is null');
+					options.onError('Cannot get record!');
+				}
+			}.bind(this);
+			getRequest.onerror = function(e){
+				this.log('getRequest.onerror');
+			}.bind(this);
+		}else{
+			var transaction = this._update(key, data, options);
+		}
+		
+		return transaction;
+	};
+	
+	HandbookIDB.prototype._remove = function(key, options){
+		this.log('HandbookIDB.prototype._remove');
 		
 		var flag = false,
 			result = null;
@@ -497,7 +580,7 @@
 		transaction.onerror = options.onError;
 
 		var request = store['delete'](key);
-		request.onsuccess = function (e) {
+		request.onsuccess = function(e){
 			this.log('request.onsuccess');
 			result = e.target.result;
 			if(result != 'undefined'){
@@ -506,9 +589,53 @@
 		}.bind(this);
 		request.onerror = function(e){
 			this.log('request.onerror');
-			options.onError(e);
 		}.bind(this);
 
+		return transaction;
+	};
+	
+	HandbookIDB.prototype.remove = function(key, options){
+		this.log('HandbookIDB.prototype.remove');
+		options = mixin({
+			storeName: this.storeName,
+			onSuccess: defaultSuccessHandler,
+			onError: defaultErrorHandler,
+			transaction: this.transactionObj
+		}, options);
+		
+		//this 'transactionBegin' flag is active in begin() function
+		if(this.transactionBegin){
+			if(options.storeName && !this.transactionStoreNames.contains(options.storeName)){
+				this.transactionStoreNames.push(options.storeName);
+			}
+			this.transactionOperations.push({'type':'remove', 'key':key, 'options':options});
+			return;
+		}
+		
+		//already have transaction, for example: batch operate
+		if(options.transaction){
+			var transaction = options.transaction;
+			var store = transaction.objectStore(options.storeName);
+			
+			var request = store['delete'](key);
+			request.onsuccess = function (e) {
+				this.log('request.onsuccess');
+				result = e.target.result;
+				if(result != 'undefined'){
+					this.transactionObj = transaction;
+					options.onSuccess(result);
+					this.transactionObj = null;
+				}else{
+					options.onError(result);
+				}
+			}.bind(this);
+			request.onerror = function(e){
+				this.log('request.onerror');
+			}.bind(this);
+		}else{
+			var transaction = this._remove(key, options);
+		}
+		
 		return transaction;
 	};
 	
