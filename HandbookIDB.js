@@ -162,6 +162,17 @@
 		}
 	};
 	
+	/**
+	 * Retrieves an object from the store by key. If no entry exists with the given id,
+	 * the success handler will be called with null as first and only argument.
+	 *
+	 * @param {*} key                               The id of the object to fetch.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if fetching was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.get = function(key, options){
 		this.log('HandbookIDB.prototype.get');
 		options = mixin({
@@ -179,8 +190,8 @@
 			this.log('transaction.oncomplete');
 			flag ? options.onSuccess(result) : options.onError(result);
 		}.bind(this);
-		transaction.onabort = options.onError;
 		transaction.onerror = options.onError;
+		transaction.onabort = options.onError;
 		
 		var request = store.get(key);
 		request.onsuccess = function(e){
@@ -190,12 +201,22 @@
 		}.bind(this);
 		request.onerror = function(e){
 			this.log('request.onerror');
-			options.onError(e);
 		}.bind(this);
 		
 		return transaction;
 	};
 	
+	/**
+	 * Retrieves an object from the store by index.
+	 *
+	 * @param {String} index                        The name of index to fetch.
+	 * @param {*} value                             The value of index to fetch.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.getByIndex = function(index, value, options){
 		this.log('HandbookIDB.prototype.getByIndex');
 		options = mixin({
@@ -230,12 +251,28 @@
 		}.bind(this);
 		request.onerror = function(e){
 			this.log('request.onerror');
-			options.onError(e);
 		}.bind(this);
 		
 		return transaction;
 	};
 
+	/**
+	 * Retrieves an object or some objects from the store by conditions.
+	 *
+	 * @param {String} type                         Fetch first object or all objects(first or all).
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {String} [options.index]              The index name used to fetch
+	 * @param {String} [options.order]              ASC or DESC, default ASC
+	 * @param {Integer} [options.offset]            Default 0
+	 * @param {Integer} [options.limit]             Default null
+	 * @param {Integer} [options.page]
+	 * @param {Boolean} [options.filterDuplicates]  Filter duplicate data
+	 * @param {Object} [options.keyRange]
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.find = function(type, options){
 		this.log('HandbookIDB.prototype.find');
 		options = mixin({
@@ -303,10 +340,23 @@
 				flag = true;
 			}
 		}.bind(this);
-		request.onerror = options.onError;
+		request.onerror = function(e){
+			this.log('request.onerror');
+		}.bind(this);
 		return transaction;
 	};
 	
+	/**
+	 * Count objects of the store by conditions.
+	 *
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {String} [options.index]              The index name used to fetch
+	 * @param {Object} [options.keyRange]
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.count = function (options) {
 		this.log('HandbookIDB.prototype.count');
 		options = mixin({
@@ -333,16 +383,28 @@
 			store = store.index(options.index);
 		}
 		var request = store.count(options.keyRange);
-		request.onsuccess = function (e) {
+		request.onsuccess = function(e){
 			this.log('request.onsuccess');
 			result = e.target.result;
 			flag = true;
 		}.bind(this);
-		request.onError = options.onError;
+		request.onError = function(e){
+			this.log('request.onError');
+		}.bind(this);
 
 		return transaction;
 	};
 	
+	/**
+	 * Save data to store
+	 *
+	 * @param {Object} data                         The data need to save.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype._save = function(data, options){
 		this.log('HandbookIDB.prototype._save');
 		
@@ -353,9 +415,7 @@
 		var transaction = this.db.transaction([options.storeName], 'readwrite');
 		transaction.oncomplete = function () {
 			this.log('transaction.oncomplete');
-			if(flag){
-				options.onSuccess(result);
-			}
+			flag ? options.onSuccess(result) : options.onError(result);
 		}.bind(this);
 		transaction.onabort = options.onError;
 		transaction.onerror = options.onError;
@@ -395,6 +455,17 @@
 		return transaction;
 	};
 	
+	/**
+	 * Save data to store with new transaction or outside transaction
+	 *
+	 * @param {Object} data                         The data need to save.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @param {String} [options.transaction]        A transaction used for this operation which in outside.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.save = function(data, options){
 		this.log('HandbookIDB.prototype.save');
 		options = mixin({
@@ -456,6 +527,17 @@
 		return transaction;
 	};
 	
+	/**
+	 * Update data by key
+	 *
+	 * @param {*} key                               The id need to update.
+	 * @param {Object} data                         The data for update.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype._update = function(key, data, options){
 		this.log('HandbookIDB.prototype._update');
 		
@@ -505,6 +587,18 @@
 		return transaction;
 	};
 	
+	/**
+	 * Update data to store by key with new transaction or outside transaction
+	 *
+	 * @param {*} key                               The id need to save.
+	 * @param {Object} data                         The data for save.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @param {String} [options.transaction]        A transaction used for this operation which in outside.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.update = function(key, data, options){
 		this.log('HandbookIDB.prototype.update');
 		options = mixin({
@@ -565,6 +659,16 @@
 		return transaction;
 	};
 	
+	/**
+	 * Remove data by key
+	 *
+	 * @param {*} key                               The id need to remove.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be fetched.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype._remove = function(key, options){
 		this.log('HandbookIDB.prototype._remove');
 		
@@ -594,6 +698,17 @@
 		return transaction;
 	};
 	
+	/**
+	 * Remove data from store by key with new transaction or outside transaction
+	 *
+	 * @param {*} key                               The id need to save.
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @param {String} [options.transaction]        A transaction used for this operation which in outside.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.remove = function(key, options){
 		this.log('HandbookIDB.prototype.remove');
 		options = mixin({
@@ -639,73 +754,71 @@
 		return transaction;
 	};
 	
+	/**
+	 * Save many data in a single transaction.
+	 * 
+	 * @param {Array} dataArray, for example: [{one save data},{on save data}]
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if all operations were successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.saveBatch = function(dataArray, options){
-		this.log('HandbookIDB.prototype.saveBatch');
-		options = mixin({
-			storeName: this.storeName,
-			onSuccess: defaultSuccessHandler,
-			onError: defaultErrorHandler
-		}, options);
-		
-		if(Object.prototype.toString.call(dataArray) != '[object Array]'){
-			options.onError(new Error('dataArray argument must be of type Array.'));
-			return;
-		}
-		
-		var flag = false,
-			called = false,
-			result = null,
-			count = dataArray.length;
-
-		var batchTransaction = this.db.transaction([options.storeName] , 'readwrite');
-		batchTransaction.oncomplete = function () {
-			this.log('batchTransaction.oncomplete');
-			flag ? options.onSuccess(flag) : options.onError(flag);
-		}.bind(this);
-		batchTransaction.onabort = options.onError;
-		batchTransaction.onerror = options.onError;
-
-		var onItemSuccess = function () {
-			count--;
-			if (count === 0 && !called) {
-				called = true;
-				flag = true;
-			}
-		};
-
-		dataArray.forEach(function (data) {
-			var key = typeof data.key != 'undefined' ? data.key : null;
-			var value = key == null && data.value ? data.value : data;
-			var onItemError = function (e) {
-				batchTransaction.abort();
-				if (!called) {
-					called = true;
-					options.onError(e);
-				}
-			};
-
-			var putRequest;
-			if (key) { //out-of-line keys
-				putRequest = batchTransaction.objectStore(options.storeName).put(value, key);
-			} else { //in-line keys
-				putRequest = batchTransaction.objectStore(options.storeName).put(value);
-			}
-			putRequest.onsuccess = onItemSuccess;
-			putRequest.onerror = onItemError;
-		}, this);
-		
-		return batchTransaction;
+		var batchData = dataArray.map(function(item){
+			return { type: 'save', key: item.key || null, value: item.value || item };
+		});
+		return this.batch(batchData, options);
 	};
 	
-	HandbookIDB.prototype.updateBatch = function(data, options){
+	/**
+	 * Update many data in a single transaction.
+	 * 
+	 * @param {Array} dataArray, for example: [{key: keyValue, value:{one update data}},{key: keyValue, value:{one update data}}]
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if all operations were successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
+	HandbookIDB.prototype.updateBatch = function(dataArray, options){
+		var batchData = dataArray.map(function(item){
+			return { type: 'update', key: item.key, value: item.value };
+		});
+		console.log(batchData);
 		
+		return this.batch(batchData, options);
 	};
 	
-	/*
-	 * dataArray: [{type:'add', key:'keyvalue', value:{}}, {type:remove, key: 'keyvalue', value{}}, {type:update, key:'keyvalue', value:{}}]
+	/**
+	 * Remove many data in a single transaction.
+	 * 
+	 * @param {Array} dataArray, for example: [{key: keyValue},{key: keyValue}] or [keyValue, keyValue]
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if all operations were successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
+	HandbookIDB.prototype.removeBatch = function(dataArray, options){
+		var batchData = dataArray.map(function(item){
+			return { type: 'remove', key: item.key || item};
+		});
+		return this.batch(batchData, options);
+	};
+	
+	/**
+	 * Operation many data in a single transaction, include save update and remove.
+	 * 
+	 * @param {Array} dataArray, for example: [{type:'add', value:{}}, {type:remove, key: 'keyvalue'}, {type:update, key:'keyvalue', value:{}}]
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if all operations were successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
 	 */
 	HandbookIDB.prototype.batch = function(dataArray, options){
-		this.log('HandbookIDB.prototype.saveBatch');
+		this.log('HandbookIDB.prototype.batch');
 		options = mixin({
 			storeName: this.storeName,
 			onSuccess: defaultSuccessHandler,
@@ -713,20 +826,20 @@
 		}, options);
 
 		if(Object.prototype.toString.call(dataArray) != '[object Array]'){
-			options.onError(new Error('dataArray argument must be of type Array.'));
+			options.onError('dataArray argument must be of type Array.');
 			return;
 		}
-		var batchTransaction = this.db.transaction([this.storeName] , 'readwrite');
+		var batchTransaction = this.db.transaction([options.storeName] , 'readwrite');
 		batchTransaction.oncomplete = function () {
-			var callback = hasSuccess ? onSuccess : onError;
-			callback(hasSuccess);
+			var callback = flag ? options.onSuccess : options.onError;
+			callback(flag);
 		};
 		batchTransaction.onabort = options.onError;
 		batchTransaction.onerror = options.onError;
-
-		var count = dataArray.length;
-		var called = false;
-		var flag = false;
+		var count = dataArray.length,
+			called = false,
+			flag = false,
+			request = null;
 
 		var onItemSuccess = function () {
 			count--;
@@ -735,89 +848,72 @@
 				flag = true;
 			}
 		};
-
+		var store = batchTransaction.objectStore(options.storeName);
 		dataArray.forEach(function (operation) {
+			if(called){
+				return;
+			}
 			var type = operation.type;
-			var key = operation.key;
+			var key = operation.key || null;
 			var value = operation.value;
 
 			var onItemError = function (e) {
 				batchTransaction.abort();
 				if (!called) {
 					called = true;
-					onError(e, type, key);
+					options.onError(e);
 				}
 			};
-
-			if (type == 'remove') {
-				var deleteRequest = batchTransaction.objectStore(this.storeName)['delete'](key);
-				deleteRequest.onsuccess = onItemSuccess;
-				deleteRequest.onerror = onItemError;
-			} else if (type == 'put') {
-				var putRequest;
-				if (key !== null) { // out-of-line keys
-					putRequest = batchTransaction.objectStore(this.storeName).put(value, key);
-				} else { // in-line keys
-					putRequest = batchTransaction.objectStore(this.storeName).put(value);
-				}
-				putRequest.onsuccess = onItemSuccess;
-				putRequest.onerror = onItemError;
+			switch(type){
+				case 'save':
+					request = key !== null ? store.put(value, key) : store.put(value);
+					request.onsuccess = onItemSuccess;
+					request.onerror = onItemError;
+					break;
+				case 'update':
+					console.log(key);
+					var getRequest = store.get(key);
+					getRequest.onsuccess = function(e){
+						console.log(e);
+						getResult = e.target.result;
+						console.log(getResult);
+						if(getResult){
+							for( var k in value){
+								getResult[k] = typeof value[k] != 'undefined' ? value[k] : getResult[k];
+							}
+							request = store.put(getResult);
+							request.onsuccess = onItemSuccess;
+							request.onerror = onItemError;
+						}else{
+							onItemError('Can not get record by key');
+						}
+					};
+					getRequest.onerror = onItemError;
+					break;
+				case 'remove':
+					request = store['delete'](key);
+					request.onsuccess = onItemSuccess;
+					request.onerror = onItemError;
+					break;
+				default:
+					break;
 			}
 		}, this);
 
 		return batchTransaction;
 	}
 	
-	HandbookIDB.prototype.removeBatch = function(dataArray, options){
-		this.log('HandbookIDB.prototype.removeBatch');
-		options = mixin({
-			storeName: this.storeName,
-			onSuccess: defaultSuccessHandler,
-			onError: defaultErrorHandler
-		}, options);
-		
-		if(Object.prototype.toString.call(dataArray) != '[object Array]'){
-			options.onError(new Error('dataArray argument must be of type Array.'));
-			return;
-		}
-		
-		var flag = false,
-			called = false,
-			result = null,
-			count = dataArray.length;
-
-		var batchTransaction = this.db.transaction([options.storeName] , 'readwrite');
-		batchTransaction.oncomplete = function () {
-			this.log('batchTransaction.oncomplete');
-			flag ? options.onSuccess(flag) : options.onError(flag);
-		}.bind(this);
-		batchTransaction.onabort = options.onError;
-		batchTransaction.onerror = options.onError;
-
-		var onItemSuccess = function () {
-			count--;
-			if (count === 0 && !called) {
-				called = true;
-				flag = true;
-			}
-		};
-		var batchStore = batchTransaction.objectStore(this.storeName);
-		dataArray.forEach(function (key) {
-			var onItemError = function (e) {
-				batchTransaction.abort();
-				if (!called) {
-					called = true;
-					options.onError(e);
-				}
-			};
-			var deleteRequest = batchStore['delete'](key);
-			deleteRequest.onsuccess = onItemSuccess;
-			deleteRequest.onerror = onItemError;
-		}, this);
-		
-		return batchTransaction;
-	};
-	
+	/**
+	 * Remove many data by index
+	 * 
+	 * @param {String} index                        Index name
+	 * @param {*} value                             Index value
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if the operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.removeByIndex = function(index, value, options){
 		this.log('HandbookIDB.prototype.removeByIndex');
 		options = mixin({
@@ -840,7 +936,6 @@
 		transaction.onerror = options.onError;
 		
 		if(!store.indexNames.contains(index)){
-			transaction.abort();
 			options.onError('Index:'+index+' is not exist!');
 			return;
 		}
@@ -863,8 +958,19 @@
 		request.onerror = function(e){
 			this.log('request.onerror');
 		}.bind(this);
+		
+		return transaction;
 	};
 	
+	/**
+	 * Clear one store's data
+	 * 
+	 * @param {Object} options
+	 * @param {String or Array} [options.storeName] Which store can be operation.
+	 * @param {Function} [options.onSuccess]        A callback that is called if the operation was successful.
+	 * @param {Function} [options.onError]          A callback that will be called if an error occurred during the operation.
+	 * @returns {Transaction}                       The transaction used for this operation.
+	 */
 	HandbookIDB.prototype.clear = function(options){
 		this.log('HandbookIDB.prototype.clear');
 		options = mixin({
@@ -899,6 +1005,17 @@
 		return transaction;
 	};
 	
+	/**
+	 * Make keyRange
+	 * 
+	 * @param {Object} options
+	 * @param {String} [options.lower]
+	 * @param {String} [options.upper]
+	 * @param {String} [options.only]
+	 * @param {Boolean} [options.excludeLower]
+	 * @param {Boolean} [options.excludeUpper]
+	 * @returns {keyRange}
+	 */
 	HandbookIDB.prototype.makeKeyRange = function(options){
 		console.log(options);
 		var keyRange = null,
