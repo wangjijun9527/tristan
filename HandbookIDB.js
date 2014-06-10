@@ -89,8 +89,7 @@
 		this.db = e.target.result;
 		switch(this.version){
 		case 1:
-			this.db.objectStoreNames
-			var store = db.createObjectStore("books", {keyPath:"id", autoIncrement: true});
+			var store = this.db.createObjectStore("books", {keyPath:"id", autoIncrement: true});
 			store.createIndex('userid','userid',{unique:false});
 			store.createIndex('category','category',{unique:false}); 
 			break;
