@@ -1005,6 +1005,8 @@
 		return transaction;
 	};
 	
+	
+	
 	/**
 	 * Make keyRange
 	 * 
@@ -1017,7 +1019,6 @@
 	 * @returns {keyRange}
 	 */
 	HandbookIDB.prototype.makeKeyRange = function(options){
-		console.log(options);
 		var keyRange = null,
 			hasLower = typeof options.lower != 'undefined',
 			hasUpper = typeof options.upper != 'undefined',
