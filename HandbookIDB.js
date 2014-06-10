@@ -1005,8 +1005,6 @@
 		return transaction;
 	};
 	
-	
-	
 	/**
 	 * Make keyRange
 	 * 
