@@ -1,0 +1,17 @@
+<!doctype html>
+<html ng-app="myApp">
+<head>
+	<link rel="stylesheet" href="css/todo.css">
+</head>
+<body ng-controller="NetworkCtrl">
+	<button ng-click="test()">test</button>
+	{{ l }}
+	<ul>
+		<li ng-repeat="d in data">
+		{{d.name}} - {{d.time}}
+		</li>
+	</ul>
+	<script src="js/angular.min.js"></script>
+	<script src="js/controller.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+	"manifest_version": 2,
+	"name": "My http queue service",
+	"version": "1",
+	"app": {
+		"background": {
+			"scripts": ["main.js"]
+		}
+	},
+	"permissions": ["http://localhost/*"],
+	"icons": { "128": "icon.jpg" }
+}
