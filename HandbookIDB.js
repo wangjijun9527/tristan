@@ -16,7 +16,8 @@
 			},
 			onError: defaultErrorHandler,
 			storeName: null,
-			debug: false
+			debug: false,
+			upgradeInfo:[]
 		};
 	
 	function HandbookIDB(name, options){
@@ -84,7 +85,7 @@
 		this.onReady();
 	};
 	
-	HandbookIDB.prototype.onupgradeneeded = function(e){
+	/*HandbookIDB.prototype.onupgradeneeded = function(e){
 		this.log('HandbookIDB.prototype.onupgradeneeded');
 		this.db = e.target.result;
 		switch(this.version){
@@ -99,7 +100,39 @@
 			console.log('--default--');
 			break;
 		}
-	};
+	};*/
+
+	HandbookIDB.prototype.onupgradeneeded = function(e){
+		this.log('HandbookIDB.prototype.onupgradeneeded');
+        this.db = event.target.result;
+        this.upgradeInfo.forEach(function(upgradeParameter){
+			if(this.db.objectStoreNames&&this.db.objectStoreNames.contains(upgradeParameter.storeName)){
+          		this.store = event.target.transaction.objectStore(upgradeParameter.storeName);
+        	} else {
+          		var optionalParameters = { autoIncrement: upgradeParameter.autoIncrement };
+          		if (upgradeParameter.keyPath !== null) {
+            		optionalParameters.keyPath = upgradeParameter.keyPath;
+          		}
+          		this.store = this.db.createObjectStore(upgradeParameter.storeName, optionalParameters);
+        	}
+
+        	upgradeParameter.indexes.forEach(function(indexParameter){
+          		var indexName = indexParameter.name;
+          		if(!indexName){
+            		this.onError(new Error('Cannot create index: No index name given.'));
+          		}
+          		if(this.store.indexNames.contains(indexName)){
+
+          		} else {
+            		this.store.createIndex(indexName, indexName, { unique: indexParameter.unique });
+          		}
+        	}, this);
+        },this);
+      };
+
+    HandbookIDB.prototype.deleteDatabase=function(dbName){
+		this.idb.deleteDatabase(dbName);
+    }
 	
 	HandbookIDB.prototype.begin = function(){
 		this.log('HandbookIDB.prototype.begin');
