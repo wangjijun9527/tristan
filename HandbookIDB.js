@@ -85,23 +85,6 @@
 		this.onReady();
 	};
 	
-	/*HandbookIDB.prototype.onupgradeneeded = function(e){
-		this.log('HandbookIDB.prototype.onupgradeneeded');
-		this.db = e.target.result;
-		switch(this.version){
-		case 1:
-			var store = this.db.createObjectStore("books", {keyPath:"id", autoIncrement: true});
-			store.createIndex('userid','userid',{unique:false});
-			store.createIndex('category','category',{unique:false}); 
-			break;
-		case 53:
-			console.log('--53--');
-		default:
-			console.log('--default--');
-			break;
-		}
-	};*/
-
 	HandbookIDB.prototype.onupgradeneeded = function(e){
 		this.log('HandbookIDB.prototype.onupgradeneeded');
         this.db = event.target.result;
@@ -154,14 +137,13 @@
 			this.transactionOperations = [];
 			this.transactionStoreNames = [];
 			var flag = true;
-			var transaction = this.db.transaction([transactionStoreNames], 'readwrite');
+			var transaction = this.db.transaction(transactionStoreNames, 'readwrite');
 			var self = this;
 			transactionOperations.forEach(function(operation){
 				if(!flag){
 					return;
 				}
 				operation.options.transaction = transaction;
-				operation.options.storeName = transactionStoreNames;
 				switch(operation.type){
 					case 'save':
 						flag = self.save(operation.data, operation.options);
